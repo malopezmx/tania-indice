@@ -1,0 +1,123 @@
+/* Wider centered post title */
+.wp-block-post-title {
+    max-width: 860px !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+}
+/* Wider and centered content column in posts */
+.wp-block-post-content {
+    max-width: 860px !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+}
+
+.entry-content {
+    max-width: 860px !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+}
+.wp-block-post-content > * {
+    max-width: 860px !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+}
+
+/* Reduce post title size on homepage */
+.wp-block-post-title {
+	font-size: 1.6rem !important;
+	font-weight: bold;
+}
+
+.wp-block-post-title a {
+	font-size: 1.6rem !important;
+	font-weight: bold;
+}
+
+.wp-block-post-title,
+.entry-title {
+    font-size: 1.6rem !important;
+    font-weight: 700 !important;
+    font-family: Georgia, 'Times New Roman', serif !important;
+}
+/* Prevent awkward word breaking in titles and content */
+h1, h2, h3, h4, h5, h6 {
+	word-break: normal;
+	overflow-wrap: break-word;
+	hyphens: none;
+}
+
+.wp-block-post-title,
+.entry-title {
+	word-break: normal;
+	hyphens: none;
+}
+
+/* Post body text — Georgia serif, comfortable reading size */
+.wp-block-post-content,
+.entry-content,
+.wp-block-post-content p,
+.entry-content p {
+	font-family: Georgia, 'Times New Roman', serif;
+	font-size: 1.1rem;
+	line-height: 1.8;
+	color: #333333;
+}
+
+/* Italic quotes */
+.wp-block-post-content em,
+.wp-block-post-content i {
+	font-style: italic;
+}
+
+/* Post notes (Nota.-) */
+.post-nota {
+	font-size: .9em;
+	color: #555;
+	border-left: 3px solid #aaa;
+	padding-left: 10px;
+	margin: 15px 0;
+}
+
+/* Source/date line */
+.post-source {
+	font-size: .9em;
+}
+
+/* Photo captions */
+.post-caption,
+figure.post-image figcaption {
+	font-size: .85em;
+	color: #666;
+	font-style: italic;
+	text-align: center;
+	margin-top: 5px;
+}
+
+/* Footer links (Leer también, Ver también, Escuchar) */
+.post-links {
+	font-size: .9em;
+	margin-top: 15px;
+}
+
+/* Author byline */
+.post-author {
+	font-weight: bold;
+	margin-top: 20px;
+}
+
+/* Post images */
+figure.post-image {
+	margin: 20px 0;
+	text-align: center;
+}
+
+figure.post-image img {
+	max-width: 100%;
+}
+
+/* Section separator */
+hr.post-separator {
+	border: none;
+	border-top: 1px solid #ccc;
+	margin: 25px 0;
+}
