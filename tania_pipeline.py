@@ -66,6 +66,16 @@ BLOG_ORIGIN_NAMES = {
 }
 BLOG_ORIGIN_DEFAULT = "El Blog de Tania Quintero"   # if no tag found in subject
 
+# Maps blog_origin value → (WordPress category display name, category slug)
+# Slugs must match exactly what exists in WordPress (Entradas → Categorías)
+BLOG_CATEGORY_MAP = {
+    "El Blog de Iván García":    ("Blog Iván",            "blog-ivan"),
+    "El Blog de Tania Quintero": ("Blog Tania",           "blog-tania"),
+    "Blog Desde La Habana":      ("Blog Desde La Habana", "blog-desde-la-habana"),
+    # Add more as Tania provides new sources:
+    # "Blog de las Américas":    ("Blog de las Américas", "blog-de-las-americas"),
+}
+
 CLAUDE_MODEL      = "claude-sonnet-4-6"
 POSTS_PER_REPORT  = 100  # number of posts per review/WXR chunk file
 
@@ -892,13 +902,19 @@ def wp_create_post(site, token, post, media_map, as_draft=False):
         wp_author = "taniaquintero"   # all other authors → tania (she curates the blog)
 
     pub_date = post.get("date", "2000-01-01") + "T12:00:00"
+
+    # Map blog_origin to WordPress category slug
+    blog_origin = post.get('blog_origin', BLOG_ORIGIN_DEFAULT)
+    _, cat_slug = BLOG_CATEGORY_MAP.get(blog_origin, ("Blog Tania", "blog-tania"))
+
     data = {
-        "title":    post.get("title", "(sin título)"),
-        "content":  html,
-        "status":   "draft" if as_draft else "publish",
-        "date":     pub_date,
-        "date_gmt": pub_date,
-        "author":   wp_author,
+        "title":      post.get("title", "(sin título)"),
+        "content":    html,
+        "status":     "draft" if as_draft else "publish",
+        "date":       pub_date,
+        "date_gmt":   pub_date,
+        "author":     wp_author,
+        "categories": cat_slug,
     }
 
     # Set featured image — use attached image or YouTube thumbnail as fallback
@@ -1011,6 +1027,16 @@ def build_wxr(posts, blog_name, blog_url):
             '      <wp:post_type>post</wp:post_type>',
             '      <wp:is_sticky>0</wp:is_sticky>',
         ]
+
+        # Add category based on blog_origin
+        blog_origin  = post.get('blog_origin', BLOG_ORIGIN_DEFAULT)
+        cat_name, cat_slug = BLOG_CATEGORY_MAP.get(
+            blog_origin, ("Blog Tania", "blog-tania")
+        )
+        lines.append(
+            f'      <category domain="category" nicename="{cat_slug}">'
+            f'<![CDATA[{cat_name}]]></category>'
+        )
 
         # Add featured image as postmeta if present
         # WordPress.com may not honour _thumbnail_id on import but
@@ -1287,6 +1313,7 @@ def main():
             result['post_num']    = parsed['post_num']
             result['source_file'] = eml_path.name
             result['attachments'] = attachments
+            result['blog_origin'] = blog_origin
 
             flags = result.get('flags', [])
             if flags:
