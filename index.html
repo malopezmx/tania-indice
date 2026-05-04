@@ -317,7 +317,7 @@
                 flex-wrap: wrap;
             }
 
-            .item-fecha, .item-autor { margin-bottom: 0; }
+            .item-fecha { margin-bottom: 0; }
 
             .item-titulo {
                 padding: 0.25rem 0 0.875rem;
@@ -350,9 +350,6 @@
             <select id="filtro-año" aria-label="Filtrar por año">
                 <option value="">Todos los años</option>
             </select>
-            <select id="filtro-autor" aria-label="Filtrar por autor">
-                <option value="">Todos los autores</option>
-            </select>
             <select id="filtro-blog" aria-label="Filtrar por blog">
                 <option value="">Todos los blogs</option>
             </select>
@@ -378,10 +375,9 @@
 'use strict';
 
 const API    = 'https://public-api.wordpress.com/wp/v2/sites/elblogdeivanytania.com';
-const CAMPOS = 'id,date,title,link,author,categories';
+const CAMPOS = 'id,date,title,link,categories';
 
 let todosArticulos = [];
-let mapaAutores    = {};   // id → nombre
 let mapaCategorias = {};   // id → nombre
 
 // ── Fetch helpers ──────────────────────────────────────────
@@ -397,11 +393,6 @@ async function fetchJSON(url) {
 }
 
 // ── Data loading ───────────────────────────────────────────
-
-async function cargarAutores() {
-    const datos = await fetchJSON(`${API}/users?per_page=100&_fields=id,name`);
-    datos.forEach(u => { mapaAutores[u.id] = u.name; });
-}
 
 async function cargarCategorias() {
     const datos = await fetchJSON(`${API}/categories?per_page=100&_fields=id,name`);
@@ -454,19 +445,6 @@ function poblarFiltroAño(articulos) {
         opt.textContent = año;
         sel.appendChild(opt);
     });
-}
-
-function poblarFiltroAutor() {
-    const sel = document.getElementById('filtro-autor');
-    // Sort alphabetically by first name
-    Object.entries(mapaAutores)
-        .sort((a, b) => a[1].localeCompare(b[1], 'es'))
-        .forEach(([id, nombre]) => {
-            const opt = document.createElement('option');
-            opt.value = id;
-            opt.textContent = nombre;
-            sel.appendChild(opt);
-        });
 }
 
 function poblarFiltroBlog(articulos) {
@@ -541,7 +519,6 @@ function renderizar(articulos) {
         const li = document.createElement('li');
         li.className = 'item';
 
-        const autor   = mapaAutores[a.author] || '';
         const fecha   = formatearFecha(a.date);
         const blog    = clasesBlog(a.categories);
         const blogHtml = blog
@@ -552,7 +529,6 @@ function renderizar(articulos) {
         li.innerHTML = `
             <div class="item-meta">
                 <span class="item-fecha">${fecha}</span>
-                <span class="item-autor">${autor}</span>
                 ${blogHtml}
             </div>
             <div class="item-titulo">
@@ -571,13 +547,11 @@ function renderizar(articulos) {
 function filtrar() {
     const busqueda = document.getElementById('buscar').value.toLowerCase().trim();
     const año      = document.getElementById('filtro-año').value;
-    const autorId  = parseInt(document.getElementById('filtro-autor').value) || 0;
     const blogId   = parseInt(document.getElementById('filtro-blog')?.value)  || 0;
 
     const resultado = todosArticulos.filter(a => {
         if (busqueda && !a.title.rendered.toLowerCase().includes(busqueda)) return false;
         if (año      && new Date(a.date).getFullYear() !== parseInt(año, 10))  return false;
-        if (autorId  && a.author !== autorId)                                  return false;
         if (blogId   && !a.categories.includes(blogId))                        return false;
         return true;
     });
@@ -591,7 +565,7 @@ function configurarEventos() {
         clearTimeout(timer);
         timer = setTimeout(filtrar, 180);
     });
-    ['filtro-año', 'filtro-autor', 'filtro-blog'].forEach(id => {
+    ['filtro-año', 'filtro-blog'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.addEventListener('change', filtrar);
     });
@@ -601,12 +575,10 @@ function configurarEventos() {
 
 async function iniciar() {
     try {
-        // Authors + categories load fast, posts take longer
-        await Promise.all([cargarAutores(), cargarCategorias()]);
+        await cargarCategorias();
         todosArticulos = await cargarArticulos();
 
         poblarFiltroAño(todosArticulos);
-        poblarFiltroAutor();
         poblarFiltroBlog(todosArticulos);
         configurarEventos();
         renderizar(todosArticulos);
