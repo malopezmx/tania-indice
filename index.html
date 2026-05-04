@@ -350,6 +350,9 @@
             <select id="filtro-año" aria-label="Filtrar por año">
                 <option value="">Todos los años</option>
             </select>
+            <select id="filtro-autor" aria-label="Filtrar por autor">
+                <option value="">Todos los autores</option>
+            </select>
             <select id="filtro-blog" aria-label="Filtrar por blog">
                 <option value="">Todos los blogs</option>
             </select>
@@ -375,10 +378,11 @@
 'use strict';
 
 const API    = 'https://public-api.wordpress.com/wp/v2/sites/elblogdeivanytania.com';
-const CAMPOS = 'id,date,title,link,categories';
+const CAMPOS = 'id,date,title,link,categories,tags';
 
 let todosArticulos = [];
 let mapaCategorias = {};   // id → nombre
+let mapaEtiquetas  = {};   // id → nombre (author tags)
 
 // ── Fetch helpers ──────────────────────────────────────────
 
@@ -397,6 +401,11 @@ async function fetchJSON(url) {
 async function cargarCategorias() {
     const datos = await fetchJSON(`${API}/categories?per_page=100&_fields=id,name`);
     datos.forEach(c => { mapaCategorias[c.id] = c.name; });
+}
+
+async function cargarEtiquetas() {
+    const datos = await fetchJSON(`${API}/tags?per_page=100&_fields=id,name`);
+    datos.forEach(t => { mapaEtiquetas[t.id] = t.name; });
 }
 
 async function cargarArticulos() {
@@ -443,6 +452,29 @@ function poblarFiltroAño(articulos) {
         const opt = document.createElement('option');
         opt.value = año;
         opt.textContent = año;
+        sel.appendChild(opt);
+    });
+}
+
+function poblarFiltroAutor(articulos) {
+    // Populate author filter from WordPress tags (author names stored as tags)
+    const usados = new Set(articulos.flatMap(a => a.tags || []));
+    const autores = Object.entries(mapaEtiquetas)
+        .filter(([id]) => usados.has(parseInt(id)));
+
+    const sel = document.getElementById('filtro-autor');
+    if (autores.length === 0) {
+        sel.closest('.filtros').removeChild(sel);
+        return;
+    }
+    // "No definido" first, then alphabetical
+    const noDefinido = autores.filter(([, n]) => n === 'No definido');
+    const definidos  = autores.filter(([, n]) => n !== 'No definido')
+                              .sort((a, b) => a[1].localeCompare(b[1], 'es'));
+    [...definidos, ...noDefinido].forEach(([id, nombre]) => {
+        const opt = document.createElement('option');
+        opt.value = id;
+        opt.textContent = nombre;
         sel.appendChild(opt);
     });
 }
@@ -547,11 +579,13 @@ function renderizar(articulos) {
 function filtrar() {
     const busqueda = document.getElementById('buscar').value.toLowerCase().trim();
     const año      = document.getElementById('filtro-año').value;
+    const autorId  = parseInt(document.getElementById('filtro-autor')?.value) || 0;
     const blogId   = parseInt(document.getElementById('filtro-blog')?.value)  || 0;
 
     const resultado = todosArticulos.filter(a => {
         if (busqueda && !a.title.rendered.toLowerCase().includes(busqueda)) return false;
         if (año      && new Date(a.date).getFullYear() !== parseInt(año, 10))  return false;
+        if (autorId  && !(a.tags || []).includes(autorId))                     return false;
         if (blogId   && !a.categories.includes(blogId))                        return false;
         return true;
     });
@@ -565,7 +599,7 @@ function configurarEventos() {
         clearTimeout(timer);
         timer = setTimeout(filtrar, 180);
     });
-    ['filtro-año', 'filtro-blog'].forEach(id => {
+    ['filtro-año', 'filtro-autor', 'filtro-blog'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.addEventListener('change', filtrar);
     });
@@ -575,10 +609,11 @@ function configurarEventos() {
 
 async function iniciar() {
     try {
-        await cargarCategorias();
+        await Promise.all([cargarCategorias(), cargarEtiquetas()]);
         todosArticulos = await cargarArticulos();
 
         poblarFiltroAño(todosArticulos);
+        poblarFiltroAutor(todosArticulos);
         poblarFiltroBlog(todosArticulos);
         configurarEventos();
         renderizar(todosArticulos);

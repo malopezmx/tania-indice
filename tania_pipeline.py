@@ -420,17 +420,17 @@ def parse_subject_new_format(subject):
 
 def parse_subject(subject):
     """
-    Parse: N) [WEEKDAY] DD MONTH[.][:]  Title ... [BLOG IVAN|TANIA] [OJO: ...]
+    Parse: N) [WEEKDAY] DD [DE] MONTH[.][:]  Title ... [BLOG IVAN|TANIA] [OJO: ...]
     All optional elements handled gracefully.
     Returns dict or None.
     """
     WORD = r'[A-Za-z\u00c0-\u024f]+'
 
     # Try with BLOG tag (to strip it from raw_title cleanly)
-    # Match any known BLOG tag
+    # Match any known BLOG tag. Optional "DE" between day number and month name.
     blog_pattern = '|'.join(re.escape(k) for k in BLOG_ORIGIN_NAMES)
     m = re.match(
-        rf'(\d+)\)\s+(?:{WORD}\s+)?(\d+)\s+({WORD})[\s.:]*(.+?)\s+({blog_pattern})',
+        rf'(\d+)\)\s+(?:{WORD}\s+)?(\d+)\s+(?:DE\s+)?({WORD})[\s.:]*(.+?)\s+({blog_pattern})',
         subject, re.IGNORECASE
     )
     if m:
@@ -450,7 +450,7 @@ def parse_subject(subject):
 
     # Fallback: no BLOG tag — grab everything after month as raw title
     m2 = re.match(
-        rf'(\d+)\)\s+(?:{WORD}\s+)?(\d+)\s+({WORD})[\s.:]*(.+)',
+        rf'(\d+)\)\s+(?:{WORD}\s+)?(\d+)\s+(?:DE\s+)?({WORD})[\s.:]*(.+)',
         subject, re.IGNORECASE
     )
     if m2:
@@ -895,11 +895,15 @@ def wp_create_post(site, token, post, media_map, as_draft=False):
             html = embed_block + html
 
     # Map author to a valid WordPress user login name
-    raw_author = (post.get("author") or "").lower().strip()
-    if "iv" in raw_author and "garc" in raw_author:
+    raw_author_lower = (post.get("author") or "").lower().strip()
+    if "iv" in raw_author_lower and "garc" in raw_author_lower:
         wp_author = "ivangquintero"
     else:
         wp_author = "taniaquintero"   # all other authors → tania (she curates the blog)
+
+    # Author tag — use detected author name or "No definido" as a WordPress tag
+    raw_author = (post.get("author") or "").strip()
+    author_tag = raw_author if raw_author else "No definido"
 
     pub_date = post.get("date", "2000-01-01") + "T12:00:00"
 
@@ -915,6 +919,7 @@ def wp_create_post(site, token, post, media_map, as_draft=False):
         "date_gmt":   pub_date,
         "author":     wp_author,
         "categories": cat_slug,
+        "tags":       author_tag,
     }
 
     # Set featured image — use attached image or YouTube thumbnail as fallback
