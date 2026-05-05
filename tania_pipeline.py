@@ -420,7 +420,7 @@ def parse_subject_new_format(subject):
 
 def parse_subject(subject):
     """
-    Parse: N) [WEEKDAY] DD [DE] MONTH[.][:]  Title ... [BLOG IVAN|TANIA] [OJO: ...]
+    Parse: N) [WEEKDAY] DD [DE] MONTH [YYYY][.][:]  Title ... [BLOG IVAN|TANIA] [OJO: ...]
     All optional elements handled gracefully.
     Returns dict or None.
     """
@@ -428,41 +428,45 @@ def parse_subject(subject):
 
     # Try with BLOG tag (to strip it from raw_title cleanly)
     # Match any known BLOG tag. Optional "DE" between day number and month name.
+    # Optional 4-digit year after month name.
     blog_pattern = '|'.join(re.escape(k) for k in BLOG_ORIGIN_NAMES)
     m = re.match(
-        rf'(\d+)\)\s+(?:{WORD}\s+)?(\d+)\s+(?:DE\s+)?({WORD})[\s.:]*(.+?)\s+({blog_pattern})',
+        rf'(\d+)\)\s+(?:{WORD}\s+)?(\d+)\s+(?:DE\s+)?({WORD})(?:\s+(\d{{4}}))?\s*[\s.:]*(.+?)\s+({blog_pattern})',
         subject, re.IGNORECASE
     )
     if m:
         month_str = m.group(3).upper()
         if month_str in MONTHS_ES:
-            # Normalise the matched blog tag to a canonical key
-            matched_tag = m.group(5).upper().strip()
+            matched_tag = m.group(6).upper().strip()
             blog_key = next((k for k in BLOG_ORIGIN_NAMES if k in matched_tag), None)
+            year_override = int(m.group(4)) if m.group(4) else None
             return {
-                "post_num":   int(m.group(1)),
-                "day":        int(m.group(2)),
-                "month":      MONTHS_ES[month_str],
-                "month_str":  month_str,
-                "raw_title":  m.group(4).strip(),
-                "blog_origin": BLOG_ORIGIN_NAMES.get(blog_key, BLOG_ORIGIN_DEFAULT),
+                "post_num":      int(m.group(1)),
+                "day":           int(m.group(2)),
+                "month":         MONTHS_ES[month_str],
+                "month_str":     month_str,
+                "raw_title":     m.group(5).strip(),
+                "blog_origin":   BLOG_ORIGIN_NAMES.get(blog_key, BLOG_ORIGIN_DEFAULT),
+                "year_override": year_override,
             }
 
     # Fallback: no BLOG tag — grab everything after month as raw title
     m2 = re.match(
-        rf'(\d+)\)\s+(?:{WORD}\s+)?(\d+)\s+(?:DE\s+)?({WORD})[\s.:]*(.+)',
+        rf'(\d+)\)\s+(?:{WORD}\s+)?(\d+)\s+(?:DE\s+)?({WORD})(?:\s+(\d{{4}}))?\s*[\s.:]*(.+)',
         subject, re.IGNORECASE
     )
     if m2:
         month_str = m2.group(3).upper()
         if month_str in MONTHS_ES:
+            year_override = int(m2.group(4)) if m2.group(4) else None
             return {
-                "post_num":   int(m2.group(1)),
-                "day":        int(m2.group(2)),
-                "month":      MONTHS_ES[month_str],
-                "month_str":  month_str,
-                "raw_title":  m2.group(4).strip(),
-                "blog_origin": BLOG_ORIGIN_DEFAULT,  # no tag found — assume Tania
+                "post_num":      int(m2.group(1)),
+                "day":           int(m2.group(2)),
+                "month":         MONTHS_ES[month_str],
+                "month_str":     month_str,
+                "raw_title":     m2.group(5).strip(),
+                "blog_origin":   BLOG_ORIGIN_DEFAULT,
+                "year_override": year_override,
             }
     return None
 
