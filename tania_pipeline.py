@@ -1134,7 +1134,7 @@ def build_review_report(posts_chunk, chunk_num, total_chunks, total_all):
             featured_info = f_type
 
         parts.append(f"""
-<div class="post">
+<div class="post" data-wp-id="{post.get('wp_id', '')}">
   <div class="post-header">
     <h2 class="{status_class}">{escape_xml(title)}</h2>
     <div class="meta">
@@ -1212,6 +1212,72 @@ def build_review_report(posts_chunk, chunk_num, total_chunks, total_all):
                 )
 
         parts.append(f'  <div class="content">\n{featured_block}{review_html}\n  </div>\n</div>\n')
+
+    parts.append('</body></html>')
+    return ''.join(parts)
+
+# ── Alertas report ────────────────────────────────────────────────────────────
+
+ALERTAS_CSS = """
+body{font-family:Arial,sans-serif;max-width:800px;margin:40px auto;padding:0 20px;color:#333;background:#f9f9f9}
+h1{color:#8b0000;border-bottom:2px solid #8b0000;padding-bottom:8px}
+.summary{background:#fff;border:1px solid #ddd;padding:12px 16px;border-radius:4px;margin-bottom:24px;font-size:.95em}
+.post{border-left:4px solid #ffa000;padding:10px 15px;margin:12px 0;background:#fff8e1;border-radius:0 4px 4px 0}
+.post h3{margin:0 0 4px;font-size:1em;font-weight:bold}
+.post h3 a{color:#8b0000;text-decoration:none}
+.post h3 a:hover{text-decoration:underline}
+.post .fecha{font-size:.82em;color:#777;margin-bottom:6px}
+.post ul{margin:6px 0 0;padding-left:18px;font-size:.88em;color:#444}
+.post li{margin:3px 0}
+.ninguna{color:green;font-style:italic;margin-top:20px}
+"""
+
+def build_alertas_report(posts_chunk, chunk_label, blog_url):
+    """Generate a lightweight alerts-only HTML report for Tania and Iván."""
+    flagged = [p for p in posts_chunk if p.get('flags')]
+    total   = len(posts_chunk)
+
+    parts = [f"""<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8">
+<title>Alertas{' — ' + chunk_label if chunk_label else ''}</title>
+<style>{ALERTAS_CSS}</style>
+</head>
+<body>
+<h1>⚠ Alertas para revisión</h1>
+<div class="summary">
+  <strong>{len(flagged)} posts con alertas</strong> de {total} procesados
+  {' &nbsp;|&nbsp; <strong>' + chunk_label + '</strong>' if chunk_label else ''}
+  &nbsp;|&nbsp; <small style="color:#888">Generado: {datetime.now().strftime('%Y-%m-%d %H:%M')}</small>
+</div>
+"""]
+
+    if not flagged:
+        parts.append('<p class="ninguna">✓ No hay alertas en este lote. ¡Todo correcto!</p>')
+    else:
+        for post in flagged:
+            title   = post.get('title', '(sin título)')
+            date    = post.get('date', '')
+            wp_id   = post.get('wp_id', '')
+            flags   = post.get('flags', [])
+
+            if wp_id and str(wp_id) != '?':
+                link = f'{blog_url}/?p={wp_id}'
+                title_html = f'<a href="{link}" target="_blank">{escape_xml(title)}</a>'
+            else:
+                search = urllib.parse.quote(title[:60])
+                link   = f'{blog_url}/?s={search}'
+                title_html = f'<a href="{link}" target="_blank">{escape_xml(title)}</a>'
+
+            flag_items = '\n'.join(f'        <li>{escape_xml(f)}</li>' for f in flags)
+            parts.append(f"""<div class="post">
+  <h3>{title_html}</h3>
+  <div class="fecha">{date}</div>
+  <ul>
+{flag_items}
+  </ul>
+</div>
+""")
 
     parts.append('</body></html>')
     return ''.join(parts)
@@ -1359,13 +1425,22 @@ def main():
     for chunk_num, chunk in enumerate(chunks, 1):
         d_from = chunk[0]['date']
         d_to   = chunk[-1]['date']
-        review_fname = "revision.html" if total_chunks == 1 else                        f"revision_{chunk_num:03d}_{d_from}_al_{d_to}.html"
+        review_fname = "revision.html" if total_chunks == 1 else \
+                       f"revision_{chunk_num:03d}_{d_from}_al_{d_to}.html"
+        alertas_fname = review_fname.replace("revision", "alertas")
         rev_path = output_dir / review_fname
         rev_path.write_text(
             build_review_report(chunk, chunk_num, total_chunks, len(all_posts)),
             encoding='utf-8'
         )
+        alt_path = output_dir / alertas_fname
+        chunk_label = f"Parte {chunk_num} de {total_chunks}" if total_chunks > 1 else ""
+        alt_path.write_text(
+            build_alertas_report(chunk, chunk_label, BLOG_URL),
+            encoding='utf-8'
+        )
         print(f"→ Revisión {chunk_num}/{total_chunks}: {rev_path}")
+        print(f"→ Alertas  {chunk_num}/{total_chunks}: {alt_path}")
 
     # Upload to WordPress or generate WXR
     if WP_UPLOAD and WP_CLIENT_ID != "YOUR_CLIENT_ID" and not no_upload:
@@ -1394,6 +1469,7 @@ def main():
                 try:
                     result = wp_create_post(WP_SITE, wp_token, post, media_map, as_draft)
                     post_id = result.get('ID', '?')
+                    post['wp_id'] = post_id   # store for alertas report
                     print(f"  ✓ [{i}/{len(all_posts)}] {title[:50]} (ID: {post_id})")
                     created += 1
                     time.sleep(2)
