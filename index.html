@@ -404,8 +404,17 @@ async function cargarCategorias() {
 }
 
 async function cargarEtiquetas() {
-    const datos = await fetchJSON(`${API}/tags?per_page=100&_fields=id,name`);
-    datos.forEach(t => { mapaEtiquetas[t.id] = t.name; });
+    // Paginate through all tags — 100 per page until exhausted
+    let page = 1;
+    while (true) {
+        const r = await apiFetch(`${API}/tags?per_page=100&page=${page}&_fields=id,name`);
+        const datos = await r.json();
+        if (!datos.length) break;
+        datos.forEach(t => { mapaEtiquetas[t.id] = t.name; });
+        const totalPags = parseInt(r.headers.get('X-WP-TotalPages') || '1', 10);
+        if (page >= totalPags) break;
+        page++;
+    }
 }
 
 async function cargarArticulos() {
