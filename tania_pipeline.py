@@ -1362,7 +1362,7 @@ def main():
 
 
 
-            year     = parsed.get('year_override', sent_year)
+            year     = parsed.get('year_override') or sent_year
             pub_date = f"{year}-{parsed['month']:02d}-{parsed['day']:02d}"
             # Include a short hash of the source filename so two posts
             # on the same date (formerly one per blog) never share a prefix
