@@ -57,23 +57,37 @@ BLOG_NAME = "El blog de Iván García y Tania Quintero"
 
 # Mapping from subject line blog tag to full original blog name
 # Used to generate "Publicado originalmente en..." footer line
+# New format uses short acronyms (BLOG IVAN, BLOG TANIA, BLOG IVT, BLOG DLH,
+# BLOG DDC, BLOG DLA, BLOG OTROS). Legacy long-form tags kept for old emails.
 BLOG_ORIGIN_NAMES = {
-    "BLOG IVAN":           "El Blog de Iván García",
-    "BLOG TANIA":          "El Blog de Tania Quintero",
-    "BLOG DESDE LA HABANA": "Blog Desde La Habana",
-    # Add more blogs here as Tania merges them:
-    # "BLOG DE LAS AMERICAS": "Blog de las Américas",
+    # ── New format acronyms ────────────────────────────────────────────────
+    "BLOG IVAN":   "El Blog de Iván García",
+    "BLOG TANIA":  "El Blog de Tania Quintero",
+    "BLOG IVT":    "El Blog de Iván y Tania",          # published directly on this blog
+    "BLOG DLH":    "el Blog Desde La Habana",
+    "BLOG DDC":    "Diario de Cuba",
+    "BLOG DLA":    "Diario de las Américas",
+    "BLOG OTROS":  "Sin clasificar",             # no "Publicado en..." line
+    # ── Legacy long-form tags (kept for any remaining old-format emails) ───
+    "BLOG DESDE LA HABANA": "el Blog Desde La Habana",
 }
-BLOG_ORIGIN_DEFAULT = "El Blog de Tania Quintero"   # if no tag found in subject
+
+# blog_origin values that should NOT generate a "Publicado originalmente en..."
+# line (posts published directly on this blog, or uncategorised)
+BLOG_NO_ORIGIN_LINE = {"El Blog de Iván y Tania", "Sin clasificar"}
+
+BLOG_ORIGIN_DEFAULT = "Blog Iván y Tania"   # no tag found in subject → IVT
 
 # Maps blog_origin value → (WordPress category display name, category slug)
 # Slugs must match exactly what exists in WordPress (Entradas → Categorías)
 BLOG_CATEGORY_MAP = {
-    "El Blog de Iván García":    ("Blog Iván",            "blog-ivan"),
-    "El Blog de Tania Quintero": ("Blog Tania",           "blog-tania"),
-    "Blog Desde La Habana":      ("Blog Desde La Habana", "blog-desde-la-habana"),
-    # Add more as Tania provides new sources:
-    # "Blog de las Américas":    ("Blog de las Américas", "blog-de-las-americas"),
+    "El Blog de Iván García":      ("Blog Iván",              "blog-ivan"),
+    "El Blog de Tania Quintero":   ("Blog Tania",             "blog-tania"),
+    "El Blog de Iván y Tania":     ("Blog Iván y Tania",      "blog-ivan-y-tania"),
+    "el Blog Desde La Habana":     ("Blog Desde La Habana",   "blog-desde-la-habana"),
+    "Diario de Cuba":              ("Diario de Cuba",         "diario-de-cuba"),
+    "Diario de las Américas":      ("Diario de las Américas", "diario-de-las-americas"),
+    "Sin clasificar":              ("Sin clasificar",          "sin-clasificar"),
 }
 
 CLAUDE_MODEL      = "claude-sonnet-4-6"
@@ -299,9 +313,20 @@ opening note with the same style as closing Nota.- paragraphs:
 ════════════════════════════════════════════
 ORIGINAL BLOG ATTRIBUTION
 ════════════════════════════════════════════
-The input JSON contains a "blog_origin" field with the name of the original blog
-where this post was published. Add this as the very last line of the post content,
-after all footer elements (after Leer también, Escuchar, etc.):
+The input JSON contains a "blog_origin" field. Add a "Publicado originalmente en..."
+line as the very last element of the post content ONLY when the blog_origin value is
+one of the external/historical blogs listed below. Do NOT add this line for posts
+published directly on this blog or uncategorised posts.
+
+ADD the line for:
+  "El Blog de Iván García", "El Blog de Tania Quintero",
+  "Blog Desde La Habana", "Diario de Cuba", "Diario de las Américas"
+
+Do NOT add the line for:
+  "Blog Iván y Tania"  (published directly on this blog for the first time)
+  "Sin clasificar"     (uncategorised)
+
+When the line is required, add it after all footer elements (Leer también, Escuchar, etc.):
 
   <p class="post-origin"><em>Publicado originalmente en [blog_origin].</em></p>
 
@@ -392,81 +417,100 @@ def escape_xml(s):
 
 def parse_subject_new_format(subject):
     """
-    Parse new format: YYYY-MM-DD TITLE (BLOG TAG)
-    For future posts only. Returns dict or None.
+    Parse new format: YYYYMMDD TITLE [BLOG TAG]
+    Date is 8 consecutive digits (no separators). BLOG tag is optional.
+    Falls back to BLOG_ORIGIN_DEFAULT (Blog Iván y Tania) when tag is absent.
+    Returns dict or None.
     """
+    subj = subject.strip()
+
+    # Try with BLOG tag: YYYYMMDD <title> BLOG <acronym>
     m = re.match(
-        r'(\d{4})-(\d{2})-(\d{2})\s+(.+?)\s+(BLOG\s+[A-Z\s]+?)\s*$',
-        subject.strip(), re.IGNORECASE
+        r'(\d{8})\s+(.+?)\s+(BLOG\s+\S+)\s*$',
+        subj, re.IGNORECASE
     )
-    if not m:
-        return None
-    matched_tag = m.group(5).upper().strip()
-    blog_key = next((k for k in BLOG_ORIGIN_NAMES if k in matched_tag), None)
-    try:
-        dt = datetime.strptime(m.group(1) + '-' + m.group(2) + '-' + m.group(3), '%Y-%m-%d')
-        return {
-            "post_num":   1,
-            "day":        dt.day,
-            "month":      dt.month,
-            "month_str":  "",
-            "raw_title":  m.group(4).strip(),
-            "blog_origin": BLOG_ORIGIN_NAMES.get(blog_key, BLOG_ORIGIN_DEFAULT),
-            "year_override": dt.year,
-        }
-    except ValueError:
-        return None
+    if m:
+        matched_tag = m.group(3).upper().strip()
+        blog_key    = next((k for k in BLOG_ORIGIN_NAMES if matched_tag == k), None)
+        try:
+            dt = datetime.strptime(m.group(1), '%Y%m%d')
+            return {
+                "post_num":      1,
+                "day":           dt.day,
+                "month":         dt.month,
+                "month_str":     "",
+                "raw_title":     m.group(2).strip(),
+                "blog_origin":   BLOG_ORIGIN_NAMES.get(blog_key, BLOG_ORIGIN_DEFAULT),
+                "year_override": dt.year,
+            }
+        except ValueError:
+            return None
+
+    # Fallback: YYYYMMDD <title> — no BLOG tag → default to Blog Iván y Tania
+    m2 = re.match(r'(\d{8})\s+(.+)', subj, re.IGNORECASE)
+    if m2:
+        try:
+            dt = datetime.strptime(m2.group(1), '%Y%m%d')
+            return {
+                "post_num":      1,
+                "day":           dt.day,
+                "month":         dt.month,
+                "month_str":     "",
+                "raw_title":     m2.group(2).strip(),
+                "blog_origin":   BLOG_ORIGIN_DEFAULT,
+                "year_override": dt.year,
+            }
+        except ValueError:
+            return None
+
+    return None
 
 
 def parse_subject(subject):
     """
-    Parse: N) [WEEKDAY] DD [DE] MONTH [YYYY][.][:]  Title ... [BLOG IVAN|TANIA] [OJO: ...]
+    Parse: N) [WEEKDAY] DD MONTH[.][:]  Title ... [BLOG IVAN|TANIA] [OJO: ...]
     All optional elements handled gracefully.
     Returns dict or None.
     """
     WORD = r'[A-Za-z\u00c0-\u024f]+'
 
     # Try with BLOG tag (to strip it from raw_title cleanly)
-    # Match any known BLOG tag. Optional "DE" between day number and month name.
-    # Optional 4-digit year after month name.
+    # Match any known BLOG tag
     blog_pattern = '|'.join(re.escape(k) for k in BLOG_ORIGIN_NAMES)
     m = re.match(
-        rf'(\d+)\)\s+(?:{WORD}\s+)?(\d+)\s+(?:DE\s+)?({WORD})(?:\s+(\d{{4}}))?\s*[\s.:]*(.+?)\s+({blog_pattern})',
+        rf'(\d+)\)\s+(?:{WORD}\s+)?(\d+)\s+({WORD})[\s.:]*(.+?)\s+({blog_pattern})',
         subject, re.IGNORECASE
     )
     if m:
         month_str = m.group(3).upper()
         if month_str in MONTHS_ES:
-            matched_tag = m.group(6).upper().strip()
+            # Normalise the matched blog tag to a canonical key
+            matched_tag = m.group(5).upper().strip()
             blog_key = next((k for k in BLOG_ORIGIN_NAMES if k in matched_tag), None)
-            year_override = int(m.group(4)) if m.group(4) else None
             return {
-                "post_num":      int(m.group(1)),
-                "day":           int(m.group(2)),
-                "month":         MONTHS_ES[month_str],
-                "month_str":     month_str,
-                "raw_title":     m.group(5).strip(),
-                "blog_origin":   BLOG_ORIGIN_NAMES.get(blog_key, BLOG_ORIGIN_DEFAULT),
-                "year_override": year_override,
+                "post_num":   int(m.group(1)),
+                "day":        int(m.group(2)),
+                "month":      MONTHS_ES[month_str],
+                "month_str":  month_str,
+                "raw_title":  m.group(4).strip(),
+                "blog_origin": BLOG_ORIGIN_NAMES.get(blog_key, BLOG_ORIGIN_DEFAULT),
             }
 
     # Fallback: no BLOG tag — grab everything after month as raw title
     m2 = re.match(
-        rf'(\d+)\)\s+(?:{WORD}\s+)?(\d+)\s+(?:DE\s+)?({WORD})(?:\s+(\d{{4}}))?\s*[\s.:]*(.+)',
+        rf'(\d+)\)\s+(?:{WORD}\s+)?(\d+)\s+({WORD})[\s.:]*(.+)',
         subject, re.IGNORECASE
     )
     if m2:
         month_str = m2.group(3).upper()
         if month_str in MONTHS_ES:
-            year_override = int(m2.group(4)) if m2.group(4) else None
             return {
-                "post_num":      int(m2.group(1)),
-                "day":           int(m2.group(2)),
-                "month":         MONTHS_ES[month_str],
-                "month_str":     month_str,
-                "raw_title":     m2.group(5).strip(),
-                "blog_origin":   BLOG_ORIGIN_DEFAULT,
-                "year_override": year_override,
+                "post_num":   int(m2.group(1)),
+                "day":        int(m2.group(2)),
+                "month":      MONTHS_ES[month_str],
+                "month_str":  month_str,
+                "raw_title":  m2.group(4).strip(),
+                "blog_origin": BLOG_ORIGIN_DEFAULT,  # no tag found — assume Tania
             }
     return None
 
@@ -899,15 +943,11 @@ def wp_create_post(site, token, post, media_map, as_draft=False):
             html = embed_block + html
 
     # Map author to a valid WordPress user login name
-    raw_author_lower = (post.get("author") or "").lower().strip()
-    if "iv" in raw_author_lower and "garc" in raw_author_lower:
+    raw_author = (post.get("author") or "").lower().strip()
+    if "iv" in raw_author and "garc" in raw_author:
         wp_author = "ivangquintero"
     else:
         wp_author = "taniaquintero"   # all other authors → tania (she curates the blog)
-
-    # Author tag — use detected author name or "No definido" as a WordPress tag
-    raw_author = (post.get("author") or "").strip()
-    author_tag = raw_author if raw_author else "No definido"
 
     pub_date = post.get("date", "2000-01-01") + "T12:00:00"
 
@@ -923,7 +963,6 @@ def wp_create_post(site, token, post, media_map, as_draft=False):
         "date_gmt":   pub_date,
         "author":     wp_author,
         "categories": cat_slug,
-        "tags":       author_tag,
     }
 
     # Set featured image — use attached image or YouTube thumbnail as fallback
@@ -1138,7 +1177,7 @@ def build_review_report(posts_chunk, chunk_num, total_chunks, total_all):
             featured_info = f_type
 
         parts.append(f"""
-<div class="post" data-wp-id="{post.get('wp_id', '')}">
+<div class="post">
   <div class="post-header">
     <h2 class="{status_class}">{escape_xml(title)}</h2>
     <div class="meta">
@@ -1220,72 +1259,6 @@ def build_review_report(posts_chunk, chunk_num, total_chunks, total_all):
     parts.append('</body></html>')
     return ''.join(parts)
 
-# ── Alertas report ────────────────────────────────────────────────────────────
-
-ALERTAS_CSS = """
-body{font-family:Arial,sans-serif;max-width:800px;margin:40px auto;padding:0 20px;color:#333;background:#f9f9f9}
-h1{color:#8b0000;border-bottom:2px solid #8b0000;padding-bottom:8px}
-.summary{background:#fff;border:1px solid #ddd;padding:12px 16px;border-radius:4px;margin-bottom:24px;font-size:.95em}
-.post{border-left:4px solid #ffa000;padding:10px 15px;margin:12px 0;background:#fff8e1;border-radius:0 4px 4px 0}
-.post h3{margin:0 0 4px;font-size:1em;font-weight:bold}
-.post h3 a{color:#8b0000;text-decoration:none}
-.post h3 a:hover{text-decoration:underline}
-.post .fecha{font-size:.82em;color:#777;margin-bottom:6px}
-.post ul{margin:6px 0 0;padding-left:18px;font-size:.88em;color:#444}
-.post li{margin:3px 0}
-.ninguna{color:green;font-style:italic;margin-top:20px}
-"""
-
-def build_alertas_report(posts_chunk, chunk_label, blog_url):
-    """Generate a lightweight alerts-only HTML report for Tania and Iván."""
-    flagged = [p for p in posts_chunk if p.get('flags')]
-    total   = len(posts_chunk)
-
-    parts = [f"""<!DOCTYPE html>
-<html lang="es">
-<head><meta charset="UTF-8">
-<title>Alertas{' — ' + chunk_label if chunk_label else ''}</title>
-<style>{ALERTAS_CSS}</style>
-</head>
-<body>
-<h1>⚠ Alertas para revisión</h1>
-<div class="summary">
-  <strong>{len(flagged)} posts con alertas</strong> de {total} procesados
-  {' &nbsp;|&nbsp; <strong>' + chunk_label + '</strong>' if chunk_label else ''}
-  &nbsp;|&nbsp; <small style="color:#888">Generado: {datetime.now().strftime('%Y-%m-%d %H:%M')}</small>
-</div>
-"""]
-
-    if not flagged:
-        parts.append('<p class="ninguna">✓ No hay alertas en este lote. ¡Todo correcto!</p>')
-    else:
-        for post in flagged:
-            title   = post.get('title', '(sin título)')
-            date    = post.get('date', '')
-            wp_id   = post.get('wp_id', '')
-            flags   = post.get('flags', [])
-
-            if wp_id and str(wp_id) != '?':
-                link = f'{blog_url}/?p={wp_id}'
-                title_html = f'<a href="{link}" target="_blank">{escape_xml(title)}</a>'
-            else:
-                search = urllib.parse.quote(title[:60])
-                link   = f'{blog_url}/?s={search}'
-                title_html = f'<a href="{link}" target="_blank">{escape_xml(title)}</a>'
-
-            flag_items = '\n'.join(f'        <li>{escape_xml(f)}</li>' for f in flags)
-            parts.append(f"""<div class="post">
-  <h3>{title_html}</h3>
-  <div class="fecha">{date}</div>
-  <ul>
-{flag_items}
-  </ul>
-</div>
-""")
-
-    parts.append('</body></html>')
-    return ''.join(parts)
-
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
@@ -1362,7 +1335,7 @@ def main():
 
 
 
-            year     = parsed.get('year_override') or sent_year
+            year     = parsed.get('year_override', sent_year)
             pub_date = f"{year}-{parsed['month']:02d}-{parsed['day']:02d}"
             # Include a short hash of the source filename so two posts
             # on the same date (formerly one per blog) never share a prefix
@@ -1388,7 +1361,6 @@ def main():
             result['post_num']    = parsed['post_num']
             result['source_file'] = eml_path.name
             result['attachments'] = attachments
-            result['blog_origin'] = blog_origin
 
             flags = result.get('flags', [])
             if flags:
@@ -1429,22 +1401,13 @@ def main():
     for chunk_num, chunk in enumerate(chunks, 1):
         d_from = chunk[0]['date']
         d_to   = chunk[-1]['date']
-        review_fname = "revision.html" if total_chunks == 1 else \
-                       f"revision_{chunk_num:03d}_{d_from}_al_{d_to}.html"
-        alertas_fname = review_fname.replace("revision", "alertas")
+        review_fname = "revision.html" if total_chunks == 1 else                        f"revision_{chunk_num:03d}_{d_from}_al_{d_to}.html"
         rev_path = output_dir / review_fname
         rev_path.write_text(
             build_review_report(chunk, chunk_num, total_chunks, len(all_posts)),
             encoding='utf-8'
         )
-        alt_path = output_dir / alertas_fname
-        chunk_label = f"Parte {chunk_num} de {total_chunks}" if total_chunks > 1 else ""
-        alt_path.write_text(
-            build_alertas_report(chunk, chunk_label, BLOG_URL),
-            encoding='utf-8'
-        )
         print(f"→ Revisión {chunk_num}/{total_chunks}: {rev_path}")
-        print(f"→ Alertas  {chunk_num}/{total_chunks}: {alt_path}")
 
     # Upload to WordPress or generate WXR
     if WP_UPLOAD and WP_CLIENT_ID != "YOUR_CLIENT_ID" and not no_upload:
@@ -1473,7 +1436,6 @@ def main():
                 try:
                     result = wp_create_post(WP_SITE, wp_token, post, media_map, as_draft)
                     post_id = result.get('ID', '?')
-                    post['wp_id'] = post_id   # store for alertas report
                     print(f"  ✓ [{i}/{len(all_posts)}] {title[:50]} (ID: {post_id})")
                     created += 1
                     time.sleep(2)

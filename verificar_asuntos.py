@@ -25,13 +25,19 @@ MONTHS_ES = {
 }
 
 BLOG_ORIGIN_NAMES = {
-    "BLOG IVAN":            "El Blog de Iván García",
+    # New format acronyms
+    "BLOG IVAN":   "El Blog de Iván García",
+    "BLOG TANIA":  "El Blog de Tania Quintero",
+    "BLOG IVT":    "El Blog de Iván y Tania",
+    "BLOG DLH":    "el Blog Desde La Habana",
+    "BLOG DDC":    "Diario de Cuba",
+    "BLOG DLA":    "Diario de las Américas",
+    "BLOG OTROS":  "Sin clasificar",
+    # Legacy long-form tags
+    "BLOG IVAN Y TANIA":    "El Blog de Iván y Tania",
     "BLOG DE IVAN":         "El Blog de Iván García",
-    "BLOG TANIA":           "El Blog de Tania Quintero",
     "BLOG DE TANIA":        "El Blog de Tania Quintero",
-    "BLOG IVAN Y TANIA":    "El Blog de Iván García",
-    "BLOG DE TANIA":        "El Blog de Tania Quintero",
-    "BLOG DESDE LA HABANA": "Blog Desde La Habana",
+    "BLOG DESDE LA HABANA": "el Blog Desde La Habana",
 }
 
 # Common month typos seen in the wild
@@ -57,18 +63,26 @@ MONTH_TYPOS = {
 # ── Parse functions (identical to tania_pipeline.py) ─────────────────────────
 
 def parse_subject_new_format(subject):
-    m = re.match(
-        r'(\d{4})-(\d{2})-(\d{2})\s+(.+?)\s+(BLOG\s+[A-Z\s]+?)\s*$',
-        subject.strip(), re.IGNORECASE
-    )
-    if not m:
-        return None
-    try:
-        from datetime import datetime
-        dt = datetime.strptime(m.group(1) + '-' + m.group(2) + '-' + m.group(3), '%Y-%m-%d')
-        return {"day": dt.day, "month": dt.month}
-    except ValueError:
-        return None
+    subj = subject.strip()
+    # New format: YYYYMMDD TITLE [BLOG TAG]
+    m = re.match(r'(\d{8})\s+(.+?)\s+(BLOG\s+\S+)\s*$', subj, re.IGNORECASE)
+    if m:
+        try:
+            from datetime import datetime
+            dt = datetime.strptime(m.group(1), '%Y%m%d')
+            return {"day": dt.day, "month": dt.month}
+        except ValueError:
+            return None
+    # Fallback: YYYYMMDD TITLE (no BLOG tag — still valid, defaults to IVT)
+    m2 = re.match(r'(\d{8})\s+(.+)', subj, re.IGNORECASE)
+    if m2:
+        try:
+            from datetime import datetime
+            dt = datetime.strptime(m2.group(1), '%Y%m%d')
+            return {"day": dt.day, "month": dt.month}
+        except ValueError:
+            return None
+    return None
 
 
 def parse_subject(subject):
