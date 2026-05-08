@@ -76,7 +76,7 @@ BLOG_ORIGIN_NAMES = {
 # line (posts published directly on this blog, or uncategorised)
 BLOG_NO_ORIGIN_LINE = {"El Blog de Iván y Tania", "Sin clasificar"}
 
-BLOG_ORIGIN_DEFAULT = "Blog Iván y Tania"   # no tag found in subject → IVT
+BLOG_ORIGIN_DEFAULT = "El Blog de Iván y Tania"   # no tag found in subject → IVT
 
 # Maps blog_origin value → (WordPress category display name, category slug)
 # Slugs must match exactly what exists in WordPress (Entradas → Categorías)
@@ -1361,6 +1361,7 @@ def main():
             result['post_num']    = parsed['post_num']
             result['source_file'] = eml_path.name
             result['attachments'] = attachments
+            result['blog_origin'] = blog_origin
 
             flags = result.get('flags', [])
             if flags:
